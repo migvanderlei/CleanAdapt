@@ -23,7 +23,7 @@ batch_size=48
 
 mkdir -p results
 
-CUDA_VISIBLE_DEVICES=0,1,2,3 python3 source_only_train.py \
+CUDA_VISIBLE_DEVICES=0 python3 source_only_train.py \
 --source_dataset $source_dataset \
 --target_dataset $target_dataset \
 --modality $modality \
@@ -33,10 +33,10 @@ CUDA_VISIBLE_DEVICES=0,1,2,3 python3 source_only_train.py \
 --batch_size $batch_size --milestone 10 20 \
 --weight_decay 1e-7 \
 --pretrained ./models/ \
---num_workers 15 \
+--num_workers 2 \
 --split_path ./splits --save_dir ./results \
 --seed 1 \
---gpus 4
+--gpus 1
 
 # clean all __pycache__ and .pyc files
 find . | grep -E "(__pycache__|\.pyc|\.pyo$)" | xargs rm -rf

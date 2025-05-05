@@ -11,7 +11,7 @@ import torch
 import torch.nn as nn
 import torch.optim as optim
 from torchvision import transforms
-
+from tqdm import tqdm
 import dataset.transforms as T
 
 import warnings
@@ -52,14 +52,15 @@ def main(args):
     run_name = "-".join(
         [args.adaptation_mode, args.source_dataset, args.target_dataset]
     )
-    wandb.login()
-    run = wandb.init(
-        project = "video-domain-adaptation",
-        config = args,
-        dir = log_dir,
-        entity = 'avijit9',
-        name = run_name
-    )
+    # wandb.login()
+    # run = wandb.init(
+    #     project = "video-domain-adaptation",
+    #     config = args,
+    #     dir = log_dir,
+    #     entity = 'avijit9',
+    #     name = run_name
+    # )
+    run = None
 
     # Dataloader creation
     weak_transform_train = get_weak_transforms(args, 'train')
@@ -79,8 +80,8 @@ def main(args):
     # Create the model
     print("==> Loading the I3D backbone")
     model = SourceOnlyModel(args)            
-    model = torch.nn.parallel.DataParallel(model, device_ids = list(range(args.gpus))).to(device)
-    
+    # model = torch.nn.parallel.DataParallel(model, device_ids = list(range(args.gpus))).to(device)
+    print("==> [Finished] Loading the I3D backbone")
 
     # define the loss function and optimizers here.
     criterion = nn.CrossEntropyLoss().cuda(args.gpu)
@@ -90,7 +91,7 @@ def main(args):
     weight_decay = args.weight_decay, momentum = args.momentum)
 
     # start training
-    for epoch in range(0, args.num_epochs):
+    for epoch in tqdm(range(0, args.num_epochs), desc="Epochs"):
         
         adjust_learning_rate(optimizer, epoch, args)
         
