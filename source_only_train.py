@@ -25,13 +25,13 @@ from trainers import source_only_trainer, validation
 
 def main(args):
 
-    device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+    device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
 
     if args.seed != -1:
         set_seed(args.seed)
 
     best_target_acc = 0.
-    best_source_acc = 0. 
+    best_source_acc = 0.
 
     print("\n############################################################################\n")
     print("Experimental Configs: ", args)
@@ -49,9 +49,9 @@ def main(args):
     os.makedirs(log_dir,    exist_ok=True)
     os.makedirs(save_dir,   exist_ok=True)
 
-    run_name = "-".join(
-        [args.adaptation_mode, args.source_dataset, args.target_dataset]
-    )
+    # run_name = "-".join(
+    #     [args.adaptation_mode, args.source_dataset, args.target_dataset]
+    # )
     # wandb.login()
     # run = wandb.init(
     #     project = "video-domain-adaptation",
@@ -79,12 +79,14 @@ def main(args):
 
     # Create the model
     print("==> Loading the I3D backbone")
-    model = SourceOnlyModel(args)            
-    # model = torch.nn.parallel.DataParallel(model, device_ids = list(range(args.gpus))).to(device)
+
+    model = SourceOnlyModel(args)
+    model = torch.nn.parallel.DataParallel(model, device_ids = list(range(args.gpus))).to(device)
+
     print("==> [Finished] Loading the I3D backbone")
 
     # define the loss function and optimizers here.
-    criterion = nn.CrossEntropyLoss().cuda(args.gpu)
+    criterion = nn.CrossEntropyLoss().cuda(device)
     
     # define the optimizer
     optimizer = optim.SGD(model.parameters(), args.lr,
@@ -92,19 +94,19 @@ def main(args):
 
     # start training
     for epoch in tqdm(range(0, args.num_epochs), desc="Epochs"):
-        
+
         adjust_learning_rate(optimizer, epoch, args)
-        
+
         train_epoch_acc, train_epoch_loss = source_only_trainer.train_one_epoch(source_train_loader, \
             model, criterion, optimizer, epoch, args, device)
-        
+
         if run is not None:
             run.log({"source/loss_supervised": train_epoch_loss, "epoch": epoch})
             run.log({"source/accuracy": train_epoch_acc, "epoch": epoch})
 
         source_val_epoch_acc, source_val_epoch_loss = validation.validate(source_val_loader, model, \
             epoch, args, device)
-        
+
         target_val_epoch_acc, target_val_epoch_loss = validation.validate(target_val_loader, model, \
             epoch, args, device)
 
