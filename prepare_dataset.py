@@ -1,7 +1,7 @@
 import os
 import shutil
 import glob
-import asyncio
+from kaggle.api.kaggle_api_extended import KaggleApi
 
 def group_frames_by_video(base_dir, output_dir):
     os.makedirs(output_dir, exist_ok=True)
@@ -34,13 +34,7 @@ def clean_empty_folders(root_dir):
             print(f"Removed empty folder: {dirpath}")
 
 def move_hmdb51_folders(source_dir, target_dir):
-    """
-    Move HMDB51 extracted frame folders from rawframes/rawframes/class_name/video_name/
-    directly into target_dir/video_name/, using glob.
-    """
     os.makedirs(target_dir, exist_ok=True)
-
-    # Use glob to find all video folders two levels deep: class_name/video_name/
     video_folders = glob.glob(os.path.join(source_dir, '*', '*'))
 
     for video_path in video_folders:
@@ -53,17 +47,17 @@ def move_hmdb51_folders(source_dir, target_dir):
         shutil.move(video_path, dest_path)
         print(f"Moved: {video_path} -> {dest_path}")
 
-async def download_and_unzip(dataset, output_dir):
+def download_and_unzip(dataset, output_dir):
     os.makedirs(output_dir, exist_ok=True)
     print(f"Downloading {dataset} into {output_dir}...")
-    cmd = [
-        "kaggle", "datasets", "download", "-d", dataset, "-p", output_dir, "--unzip"
-    ]
-    process = await asyncio.create_subprocess_exec(*cmd)
-    await process.communicate()
+
+    api = KaggleApi()
+    api.authenticate()
+
+    api.dataset_download_files(dataset, path=output_dir, unzip=True)
     print(f"Finished downloading and unzipping {dataset}")
 
-async def main():
+def main():
     download_dir = '/home/miguel/Workspace/personal/CleanAdapt/data/raw'
     rgb_dir = '/home/miguel/Workspace/personal/CleanAdapt/data/rgb'
 
@@ -73,10 +67,8 @@ async def main():
     hmdb51_rgb_dir = os.path.join(rgb_dir, 'hmdb51')
     ucf101_rgb_dir = os.path.join(rgb_dir, 'ucf101')
 
-    await asyncio.gather(
-        download_and_unzip('jizeyong/hmdb51', hmdb51_download_dir),
-        download_and_unzip('pevogam/ucf101-frames', ucf101_download_dir),
-    )
+    download_and_unzip('jizeyong/hmdb51', hmdb51_download_dir)
+    download_and_unzip('pevogam/ucf101-frames', ucf101_download_dir)
 
     print("Post-processing HMDB51...")
     move_hmdb51_folders(hmdb51_download_dir, hmdb51_rgb_dir)
@@ -92,4 +84,4 @@ async def main():
         print(f"Removed tmp directory: {tmp_ucf101_dir}")
 
 if __name__ == "__main__":
-    asyncio.run(main())
+    main()
