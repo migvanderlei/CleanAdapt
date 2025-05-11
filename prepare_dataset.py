@@ -1,20 +1,21 @@
 import os
 import shutil
 import glob
+import argparse
 from kaggle.api.kaggle_api_extended import KaggleApi
+
 
 def group_frames_by_video(base_dir, output_dir):
     os.makedirs(output_dir, exist_ok=True)
-
     jpg_files = glob.glob(os.path.join(base_dir, '**', '*.jpg'), recursive=True)
 
     for file_path in jpg_files:
         file_name = os.path.basename(file_path)
-
         parts = file_name.split('-')
         if len(parts) < 2:
             print(f"Skipping unexpected file name format: {file_name}")
             continue
+
         video_prefix = '-'.join(parts[:-1])
         frame_id = parts[-1].split('.')[0]
 
@@ -27,11 +28,13 @@ def group_frames_by_video(base_dir, output_dir):
         shutil.move(file_path, new_file_path)
         print(f"Moved: {file_path} -> {new_file_path}")
 
+
 def clean_empty_folders(root_dir):
     for dirpath, dirnames, filenames in os.walk(root_dir, topdown=False):
         if not dirnames and not filenames:
             os.rmdir(dirpath)
             print(f"Removed empty folder: {dirpath}")
+
 
 def move_hmdb51_folders(source_dir, target_dir):
     os.makedirs(target_dir, exist_ok=True)
@@ -47,41 +50,64 @@ def move_hmdb51_folders(source_dir, target_dir):
         shutil.move(video_path, dest_path)
         print(f"Moved: {video_path} -> {dest_path}")
 
-def download_and_unzip(dataset, output_dir):
-    os.makedirs(output_dir, exist_ok=True)
-    print(f"Downloading {dataset} into {output_dir}...")
 
+def download_and_unzip(dataset, output_dir):
+    marker_path = os.path.join(output_dir, '.extracted')
+    if os.path.exists(marker_path):
+        print(f"{dataset} already downloaded and extracted. Skipping.")
+        return
+
+    os.makedirs(output_dir, exist_ok=True)
+
+    print(f"Authenticating Kaggle API...")
     api = KaggleApi()
     api.authenticate()
 
+    print(f"Downloading and extracting {dataset} into {output_dir}...")
     api.dataset_download_files(dataset, path=output_dir, unzip=True)
-    print(f"Finished downloading and unzipping {dataset}")
+
+    with open(marker_path, 'w') as f:
+        f.write("done")
+    print(f"Finished downloading and extracting {dataset}")
+
 
 def main():
-    download_dir = '/home/miguel/Workspace/personal/CleanAdapt/data/raw'
-    rgb_dir = '/home/miguel/Workspace/personal/CleanAdapt/data/rgb'
+    parser = argparse.ArgumentParser(
+        description="Download and process HMDB51 and UCF101 datasets."
+    )
+    parser.add_argument("--download_dir", type=str, required=True, help="Path to download raw datasets.")
+    parser.add_argument("--rgb_dir", type=str, required=True, help="Path to output RGB frame folders.")
+    parser.add_argument("--skip_download", action="store_true", help="Skip downloading datasets.")
+    parser.add_argument("--skip_processing", action="store_true", help="Skip post-processing datasets.")
+    args = parser.parse_args()
 
-    hmdb51_download_dir = os.path.join(download_dir, 'hmdb51-frames')
-    ucf101_download_dir = os.path.join(download_dir, 'ucf101-frames')
+    hmdb51_dataset = 'jizeyong/hmdb51'
+    ucf101_dataset = 'pevogam/ucf101-frames'
 
-    hmdb51_rgb_dir = os.path.join(rgb_dir, 'hmdb51')
-    ucf101_rgb_dir = os.path.join(rgb_dir, 'ucf101')
+    hmdb51_download_dir = os.path.join(args.download_dir, 'hmdb51-frames')
+    ucf101_download_dir = os.path.join(args.download_dir, 'ucf101-frames')
 
-    download_and_unzip('jizeyong/hmdb51', hmdb51_download_dir)
-    download_and_unzip('pevogam/ucf101-frames', ucf101_download_dir)
+    hmdb51_rgb_dir = os.path.join(args.rgb_dir, 'hmdb51')
+    ucf101_rgb_dir = os.path.join(args.rgb_dir, 'ucf101')
 
-    print("Post-processing HMDB51...")
-    move_hmdb51_folders(hmdb51_download_dir, hmdb51_rgb_dir)
-    clean_empty_folders(hmdb51_download_dir)
+    if not args.skip_download:
+        download_and_unzip(hmdb51_dataset, hmdb51_download_dir)
+        download_and_unzip(ucf101_dataset, ucf101_download_dir)
 
-    print("Post-processing UCF101...")
-    tmp_ucf101_dir = os.path.join(ucf101_download_dir, 'ucf101-frames')
-    group_frames_by_video(tmp_ucf101_dir, ucf101_rgb_dir)
-    clean_empty_folders(tmp_ucf101_dir)
+    if not args.skip_processing:
+        print("Post-processing HMDB51...")
+        move_hmdb51_folders(hmdb51_download_dir, hmdb51_rgb_dir)
+        clean_empty_folders(hmdb51_download_dir)
 
-    if os.path.exists(tmp_ucf101_dir):
-        shutil.rmtree(tmp_ucf101_dir)
-        print(f"Removed tmp directory: {tmp_ucf101_dir}")
+        print("Post-processing UCF101...")
+        tmp_ucf101_dir = os.path.join(ucf101_download_dir, 'ucf101-frames')
+        group_frames_by_video(tmp_ucf101_dir, ucf101_rgb_dir)
+        clean_empty_folders(tmp_ucf101_dir)
+
+        if os.path.exists(tmp_ucf101_dir):
+            shutil.rmtree(tmp_ucf101_dir)
+            print(f"Removed tmp directory: {tmp_ucf101_dir}")
+
 
 if __name__ == "__main__":
     main()
