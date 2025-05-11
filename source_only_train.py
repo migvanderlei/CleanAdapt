@@ -37,7 +37,7 @@ def main(args):
     print("Experimental Configs: ", args)
     print("\n############################################################################\n")
 
-    print("==> Using Domain Adaptation Mode: {} [{}]".format(args.adaptation_mode, args.modality))
+    print(f"==> Using Domain Adaptation Mode: {args.adaptation_mode} [{args.modality}]")
 
     # Save and log directory creation
     result_dir = os.path.join(args.save_dir, '_'.join(
@@ -49,30 +49,30 @@ def main(args):
     os.makedirs(log_dir,    exist_ok=True)
     os.makedirs(save_dir,   exist_ok=True)
 
-    # run_name = "-".join(
-    #     [args.adaptation_mode, args.source_dataset, args.target_dataset]
-    # )
-    # wandb.login()
-    # run = wandb.init(
-    #     project = "video-domain-adaptation",
-    #     config = args,
-    #     dir = log_dir,
-    #     entity = 'avijit9',
-    #     name = run_name
-    # )
+    run_name = "-".join(
+        [args.adaptation_mode, args.source_dataset, args.target_dataset]
+    )
+    wandb.login()
+    run = wandb.init(
+        project = "video-domain-adaptation",
+        config = args,
+        dir = log_dir,
+        entity = 'migvanderlei-ufam',
+        name = run_name
+    )
     run = None
 
     # Dataloader creation
     weak_transform_train = get_weak_transforms(args, 'train')
     strong_transform_train = get_strong_transforms(args, 'train')
     transform_val = get_weak_transforms(args, 'val')
-    
+
     print("==> Constructing the source dataloaders..")
     source_train_dataset = get_data([weak_transform_train, strong_transform_train], args, 'train', args.source_dataset)
     source_val_dataset = get_data(transform_val, args, 'val', args.source_dataset)
     source_train_loader = get_dataloader(args, 'train', source_train_dataset)
     source_val_loader = get_dataloader(args, 'val', source_val_dataset)
-    
+
     print("==> Constructing the target dataloaders..")
     target_val_dataset = get_data(transform_val, args, 'val', args.target_dataset)
     target_val_loader = get_dataloader(args, 'val', target_val_dataset)  
@@ -80,10 +80,10 @@ def main(args):
     # Create the model
     print("==> Loading the I3D backbone")
 
-    model = SourceOnlyModel(args)
-    model = torch.nn.parallel.DataParallel(model, device_ids = list(range(args.gpus))).to(device)
+    model = SourceOnlyModel(args).to(device)
+    # model = torch.nn.parallel.DataParallel(model, device_ids = list(range(args.gpus)))
 
-    print("==> [Finished] Loading the I3D backbone")
+    print("==> [Finished] Loading Model")
 
     # define the loss function and optimizers here.
     criterion = nn.CrossEntropyLoss().cuda(device)
@@ -94,7 +94,6 @@ def main(args):
 
     # start training
     for epoch in tqdm(range(0, args.num_epochs), desc="Epochs"):
-
         adjust_learning_rate(optimizer, epoch, args)
 
         train_epoch_acc, train_epoch_loss = source_only_trainer.train_one_epoch(source_train_loader, \
