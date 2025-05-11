@@ -2,14 +2,16 @@ import os
 import shutil
 import glob
 import argparse
+from tqdm import tqdm
 from kaggle.api.kaggle_api_extended import KaggleApi
 
 
 def group_frames_by_video(base_dir, output_dir):
     os.makedirs(output_dir, exist_ok=True)
     jpg_files = glob.glob(os.path.join(base_dir, '**', '*.jpg'), recursive=True)
-
-    for file_path in jpg_files:
+    print("Source:", base_dir)
+    print("Found:", len(jpg_files), "frames")
+    for file_path in tqdm(jpg_files, desc="Processing HMDB101 files"):
         file_name = os.path.basename(file_path)
         parts = file_name.split('-')
         if len(parts) < 2:
@@ -25,8 +27,7 @@ def group_frames_by_video(base_dir, output_dir):
         new_file_name = f"frame_{int(frame_id):04d}.jpg"
         new_file_path = os.path.join(video_dir, new_file_name)
 
-        shutil.move(file_path, new_file_path)
-        print(f"Moved: {file_path} -> {new_file_path}")
+        shutil.copy(file_path, new_file_path)
 
 
 def clean_empty_folders(root_dir):
@@ -38,17 +39,16 @@ def clean_empty_folders(root_dir):
 
 def move_hmdb51_folders(source_dir, target_dir):
     os.makedirs(target_dir, exist_ok=True)
-    video_folders = glob.glob(os.path.join(source_dir, '*', '*'))
+    video_folders = glob.glob(os.path.join(source_dir, '**', '*.jpg'), recursive=True)
+    print(source_dir)
+    print("Found", len(video_folders), "frames")
 
-    for video_path in video_folders:
-        if not os.path.isdir(video_path):
-            continue
+    for video_path in tqdm(video_folders, desc="Processing HMDB51 files"):
 
         video_name = os.path.basename(video_path).replace('img_', 'frame_')
         dest_path = os.path.join(target_dir, video_name)
 
-        shutil.move(video_path, dest_path)
-        print(f"Moved: {video_path} -> {dest_path}")
+        shutil.copy(video_path, dest_path)
 
 
 def download_and_unzip(dataset, output_dir):
@@ -96,17 +96,11 @@ def main():
 
     if not args.skip_processing:
         print("Post-processing HMDB51...")
-        move_hmdb51_folders(hmdb51_download_dir, hmdb51_rgb_dir)
-        clean_empty_folders(hmdb51_download_dir)
+        move_hmdb51_folders(hmdb51_download_dir+"/rawframes", hmdb51_rgb_dir)
 
         print("Post-processing UCF101...")
-        tmp_ucf101_dir = os.path.join(ucf101_download_dir, 'ucf101-frames')
-        group_frames_by_video(tmp_ucf101_dir, ucf101_rgb_dir)
-        clean_empty_folders(tmp_ucf101_dir)
+        group_frames_by_video(ucf101_download_dir, ucf101_rgb_dir)
 
-        if os.path.exists(tmp_ucf101_dir):
-            shutil.rmtree(tmp_ucf101_dir)
-            print(f"Removed tmp directory: {tmp_ucf101_dir}")
 
 
 if __name__ == "__main__":
