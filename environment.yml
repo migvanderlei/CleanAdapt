@@ -24,6 +24,6 @@ dependencies:
   - torchaudio=2.4.0
   - pytorch-cuda=12.4
   - pip:
-      - wandb==0.9.11
+      - wandb==0.19.11
       - opencv-python==4.5.5.64
       - git+https://github.com/facebookresearch/pytorchvideo.git@main
