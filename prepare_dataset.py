@@ -45,8 +45,14 @@ def move_hmdb51_folders(source_dir, target_dir):
 
     for video_path in tqdm(video_folders, desc="Processing HMDB51 files"):
 
-        video_name = os.path.basename(video_path).replace('img_', 'frame_')
-        dest_path = os.path.join(target_dir, video_name)
+        video_name = video_path.replace('img_', 'frame_')
+        split_video_name = video_name.split('/') 
+        video_folder = split_video_name[-2]
+        
+        dest_path = os.path.join(target_dir, *split_video_name[-2:])
+
+        video_dir = os.path.join(target_dir, video_folder)
+        os.makedirs(video_dir, exist_ok=True)
 
         shutil.copy(video_path, dest_path)
 
