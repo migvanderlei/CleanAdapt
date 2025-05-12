@@ -88,7 +88,7 @@ def main(args):
         print("==> Loading pretrained weights from {}".format(args.pretrained_weight_path))
         checkpoint = torch.load(args.pretrained_weight_path, map_location='cpu')
         state_dict = checkpoint['state_dict']
-        state_dict = {key.replace("module.", ""): value for key, value in state_dict.items()}
+        state_dict = {"module."+key: value for key, value in state_dict.items()}
         model.load_state_dict(state_dict)
     else:
         print("==> Please give a valid checkpoint..")
