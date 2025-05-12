@@ -84,9 +84,15 @@ def main(args):
     model = AdaptationModel(args, device)
     model = torch.nn.parallel.DataParallel(model, device_ids=list(range(args.gpus))).to(device)
 
-    print("==> Loading pretrained weights from {}".format(args.pretrained_weight_path))
-    checkpoint = torch.load(args.pretrained_weight_path, map_location='cpu')
-    model.load_state_dict(checkpoint['state_dict'])
+    if args.pretrained_weight_path is not None:
+        print("==> Loading pretrained weights from {}".format(args.pretrained_weight_path))
+        checkpoint = torch.load(args.pretrained_weight_path, map_location='cpu')
+        state_dict = checkpoint['state_dict']
+        state_dict = {key.replace("module.", ""): value for key, value in state_dict.items()}
+        model.load_state_dict(state_dict)
+    else:
+        print("==> Please give a valid checkpoint..")
+        sys.exit(0)
 
     if args.use_ema:
         from models.ema import ModelEMA
