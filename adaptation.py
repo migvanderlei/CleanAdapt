@@ -55,8 +55,7 @@ def main(args):
 
     run_name = "-".join(["r-", str(args.r), args.source_dataset, args.target_dataset, args.modality])
 
-    # Initialize Neptune
-    run = neptune.init(
+    run = neptune.init_run(
         project="migvanderlei/cleanadapt-video-domain-adaptation",
         api_token=NEPTUNE_API_TOKEN,
         name=run_name,
