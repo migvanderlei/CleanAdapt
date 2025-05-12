@@ -155,7 +155,8 @@ def main(args):
             log_data["[Validation][Teacher] Accuracy"] = target_val_epoch_acc_t
             log_data["[Validation][Teacher] Loss"] = target_val_epoch_loss.item()
 
-        run.log_metrics(log_data, step=epoch)
+        for key, value in log_data.items():
+            run[key].append(value)
 
         if args.use_ema and target_val_epoch_acc_t > best_target_acc_t:
             best_target_acc_t = target_val_epoch_acc_t
