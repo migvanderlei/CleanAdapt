@@ -118,7 +118,7 @@ def main(args):
         adjust_learning_rate(optimizer, epoch, args)
 
         train_acc, train_loss = adapter_trainer.train_one_epoch(
-            target_train_loader, model, ema_model, criterion, optimizer, epoch, args, device)
+            target_train_loader, model, ema_model, criterion, optimizer, epoch, args, device, run)
 
         target_val_epoch_acc_s, target_val_epoch_loss = validation.validate(target_val_loader, model, epoch, args, device)
 
