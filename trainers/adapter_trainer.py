@@ -31,15 +31,15 @@ def sample_selection_step_teacher_student(dataloader, model, args, device, r = 0
             weak_seq, pseudo_target, orig_target = weak_seq.to(device), \
             pseudo_target.to(device), orig_target.to(device)
 
-        logits, _ = model.ema(weak_seq, args)
+        appendits, _ = model.ema(weak_seq, args)
 
         if args.modality == 'RGB' or args.modality == 'Flow':
-            total_loss = F.cross_entropy(logits[0], pseudo_target, reduction = 'none')
-            predictions = torch.argmax(logits[0], dim = 1)
+            total_loss = F.cross_entropy(appendits[0], pseudo_target, reduction = 'none')
+            predictions = torch.argmax(appendits[0], dim = 1)
         else:
-            total_loss = F.cross_entropy(logits[0], pseudo_target, reduction = 'none') + \
-                F.cross_entropy(logits[1], pseudo_target, reduction = 'none')
-            predictions = torch.argmax(0.5 * (logits[0] + logits[1]), dim = 1)
+            total_loss = F.cross_entropy(appendits[0], pseudo_target, reduction = 'none') + \
+                F.cross_entropy(appendits[1], pseudo_target, reduction = 'none')
+            predictions = torch.argmax(0.5 * (appendits[0] + appendits[1]), dim = 1)
 
         for i in range(total_loss.size(0)):
             loss_dict[batch[-1][i]] = total_loss[i].item()
@@ -120,13 +120,13 @@ def sample_selection_step(dataloader, model, args, device, r = 0.8):
             weak_seq, pseudo_target, orig_target = weak_seq.to(device), \
             pseudo_target.to(device), orig_target.to(device)
 
-        logits, _ = model(weak_seq, args)
+        appendits, _ = model(weak_seq, args)
 
         if args.modality == 'RGB' or args.modality == 'Flow':
-            total_loss = F.cross_entropy(logits[0], pseudo_target, reduction = 'none')
+            total_loss = F.cross_entropy(appendits[0], pseudo_target, reduction = 'none')
         else:
-            total_loss = F.cross_entropy(logits[0], pseudo_target, reduction = 'none') + \
-                F.cross_entropy(logits[1], pseudo_target, reduction = 'none')
+            total_loss = F.cross_entropy(appendits[0], pseudo_target, reduction = 'none') + \
+                F.cross_entropy(appendits[1], pseudo_target, reduction = 'none')
             
 
         for i in range(total_loss.size(0)):
@@ -179,13 +179,13 @@ def sample_selection_step(dataloader, model, args, device, r = 0.8):
     
 
 
-def train_one_epoch(data_loader, model, ema_model, criterion, optimizer, epoch, args, device, wandb_run):
+def train_one_epoch(data_loader, model, ema_model, criterion, optimizer, epoch, args, device, neptune_run):
     batch_time = AverageMeter('Time', ':1.2f')
     data_time = AverageMeter('Data', ':1.2f')
     train_1_acc = AverageMeter('Acc-RGB@cls', ':1.2f')
     train_2_acc = AverageMeter('Acc-Flow@cls', ':1.2f') 
-    train_1_loss = AverageMeter('Loss-RGB@cls', ':1.2f')
-    train_2_loss = AverageMeter('Loss-Flow@cls', ':1.2f')
+    train_1_loss = AverageMeter('loss-RGB@cls', ':1.2f')
+    train_2_loss = AverageMeter('loss-Flow@cls', ':1.2f')
     
     progress = ProgressMeter(len(data_loader), [
         batch_time, data_time, train_1_acc, train_2_acc, train_1_loss, train_2_loss
@@ -209,24 +209,24 @@ def train_one_epoch(data_loader, model, ema_model, criterion, optimizer, epoch, 
             pseudo_target.to(device), orig_target.to(device)
 
         if args.use_ema:
-            logits, _ = model(strong_seq, args)
+            appendits, _ = model(strong_seq, args)
         else:
-            logits, _ = model(weak_seq, args)
+            appendits, _ = model(weak_seq, args)
 
         if args.modality == 'RGB' or args.modality == 'Flow':
-            prec_1 = accuracy(logits[0], pseudo_target)[0]
+            prec_1 = accuracy(appendits[0], pseudo_target)[0]
             train_1_acc.update(prec_1.item())
-            loss = criterion(logits[0], pseudo_target).mean()
+            loss = criterion(appendits[0], pseudo_target).mean()
             train_1_loss.update(loss.mean().item())
         else:
-            prec_1 = accuracy(logits[0], pseudo_target)[0]
-            prec_2 = accuracy(logits[1], pseudo_target)[0]
+            prec_1 = accuracy(appendits[0], pseudo_target)[0]
+            prec_2 = accuracy(appendits[1], pseudo_target)[0]
 
             train_1_acc.update(prec_1.item())
             train_2_acc.update(prec_2.item())
 
-            loss_1 = criterion(logits[0], pseudo_target)
-            loss_2 = criterion(logits[1], pseudo_target)
+            loss_1 = criterion(appendits[0], pseudo_target)
+            loss_2 = criterion(appendits[1], pseudo_target)
             loss = loss_1.mean() + loss_2.mean()
 
             train_1_loss.update(loss_1.mean().item())
@@ -269,24 +269,19 @@ def train_one_epoch(data_loader, model, ema_model, criterion, optimizer, epoch, 
         train_acc = [train_1_acc.avg, train_2_acc.avg]
         train_loss = [train_1_loss.avg, train_2_loss.avg]
 
-    if wandb_run is not None:
-        log_data = {
-            "epoch": epoch,
-            "lr": optimizer.param_groups[0]["lr"]
-        }
-
+    if neptune_run is not None:
         if args.modality == "RGB":
-            log_data["Train/RGB/Accuracy"] = train_acc[0]
-            log_data["Train/RGB/Loss"] = train_loss[0]
+            neptune_run["train/rgb/accuracy"].append(train_acc[0])
+            neptune_run["train/rgb/loss"].append(train_loss[0])
         elif args.modality == "Flow":
-            log_data["Train/Flow/Accuracy"] = train_acc[0]
-            log_data["Train/Flow/Loss"] = train_loss[0]
+            neptune_run["train/flow/accuracy"].append(train_acc[0])
+            neptune_run["train/flow/loss"].append(train_loss[0])
         elif args.modality == "Joint":
-            log_data["Train/RGB/Accuracy"] = train_acc[0]
-            log_data["Train/Flow/Accuracy"] = train_acc[1]
-            log_data["Train/RGB/Loss"] = train_loss[0]
-            log_data["Train/Flow/Loss"] = train_loss[1]
-
-        args.run.log(log_data)
+            neptune_run["train/rgb/accuracy"].append(train_acc[0])
+            neptune_run["train/flow/accuracy"].append(train_acc[1])
+            neptune_run["train/rgb/loss"].append(train_loss[0])
+            neptune_run["train/flow/loss"].append(train_loss[1])
+        
+        neptune_run["learning rate"].append(optimizer.param_groups[0]["lr"])
 
     return train_acc, train_loss

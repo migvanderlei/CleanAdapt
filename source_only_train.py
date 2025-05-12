@@ -5,7 +5,8 @@ import sys
 import random
 import pickle
 import builtins
-import wandb
+import neptune
+from dotenv import load_dotenv
 
 import torch
 import torch.nn as nn
@@ -22,6 +23,10 @@ from models.model import SourceOnlyModel
 from dataset.get_datasets import get_data, get_weak_transforms, get_strong_transforms, get_dataloader
 from utils.utils import set_seed, adjust_learning_rate, save_checkpoint
 from trainers import source_only_trainer, validation
+
+load_dotenv()
+
+NEPTUNE_API_TOKEN = os.getenv('NEPTUNE_API_TOKEN')
 
 def main(args):
 
@@ -52,16 +57,18 @@ def main(args):
     run_name = "-".join(
         [args.adaptation_mode, args.source_dataset, args.target_dataset]
     )
-    wandb.login()
-    run = wandb.init(
-        project = "video-domain-adaptation",
-        config = args,
-        dir = log_dir,
-        entity = 'migvanderlei-ufam',
-        name = run_name
+
+    run = neptune.init_run(
+        project="migvanderlei/cleanadapt-video-domain-adaptation",
+        api_token=NEPTUNE_API_TOKEN,
+        name=run_name,
+        tags=["domain-adaptation", args.adaptation_mode],
+        capture_stdout=False,
+        capture_stderr=False
     )
 
-    # Dataloader creation
+    run["hyperparameters"] = vars(args)
+
     weak_transform_train = get_weak_transforms(args, 'train')
     strong_transform_train = get_strong_transforms(args, 'train')
     transform_val = get_weak_transforms(args, 'val')
@@ -74,43 +81,33 @@ def main(args):
 
     print("==> Constructing the target dataloaders..")
     target_val_dataset = get_data(transform_val, args, 'val', args.target_dataset)
-    target_val_loader = get_dataloader(args, 'val', target_val_dataset)  
+    target_val_loader = get_dataloader(args, 'val', target_val_dataset)
 
     # Create the model
     print("==> Loading the I3D backbone")
 
     model = SourceOnlyModel(args).to(device)
-    # model = torch.nn.parallel.DataParallel(model, device_ids = list(range(args.gpus)))
-
     print("==> [Finished] Loading Model")
 
-    # define the loss function and optimizers here.
     criterion = nn.CrossEntropyLoss().cuda(device)
     
-    # define the optimizer
     optimizer = optim.SGD(model.parameters(), args.lr,
     weight_decay = args.weight_decay, momentum = args.momentum)
 
-    if run is not None:
-        wandb.config.update({
-            "optimizer": optimizer.__class__.__name__,
-            "learning_rate": args.lr,
-            "weight_decay": args.weight_decay,
-            "momentum": args.momentum,
-            "loss_function": criterion.__class__.__name__,
-            "num_epochs": args.num_epochs,
-        }, allow_val_change=True)
+    run["optimizer"] = optimizer.__class__.__name__
+    run["learning_rate"] = args.lr
+    run["weight_decay"] = args.weight_decay
+    run["momentum"] = args.momentum
+    run["loss_function"] = criterion.__class__.__name__
 
-    # start training
     for epoch in tqdm(range(0, args.num_epochs), desc="Epochs"):
         adjust_learning_rate(optimizer, epoch, args)
 
         train_epoch_acc, train_epoch_loss = source_only_trainer.train_one_epoch(source_train_loader, \
             model, criterion, optimizer, epoch, args, device, run)
 
-        if run is not None:
-            run.log({"source/loss_supervised": train_epoch_loss, "epoch": epoch})
-            run.log({"source/accuracy": train_epoch_acc, "epoch": epoch})
+        run["train/loss"].append(train_epoch_loss)
+        run["train/accuracy"].append(train_epoch_acc)
 
         source_val_epoch_acc, source_val_epoch_loss = validation.validate(source_val_loader, model, \
             epoch, args, device)
@@ -118,17 +115,16 @@ def main(args):
         target_val_epoch_acc, target_val_epoch_loss = validation.validate(target_val_loader, model, \
             epoch, args, device)
 
-        if run is not None:
-            run.log({"source/val_accuracy": source_val_epoch_acc, "epoch": epoch})
-            run.log({"source/val_loss": source_val_epoch_loss, "epoch": epoch})
-            run.log({"target/val_accuracy": target_val_epoch_acc, "epoch": epoch})
-            run.log({"target/val_loss": target_val_epoch_loss, "epoch": epoch})        
+        run["source/val_accuracy"].append(source_val_epoch_acc)
+        run["source/val_loss"].append(source_val_epoch_loss)
+        run["target/val_accuracy"].append(target_val_epoch_acc)
+        run["target/val_loss"].append(target_val_epoch_loss)
 
         if source_val_epoch_acc > best_source_acc:
             best_source_acc = source_val_epoch_acc
             best_target_acc = target_val_epoch_acc
-            print("Found source best acc {} at epoch {}.".format(source_val_epoch_acc, epoch))
-            print("Found target acc {} at epoch {}.".format(target_val_epoch_acc, epoch))
+            print(f"Found source best acc {source_val_epoch_acc} at epoch {epoch}.")
+            print(f"Found target acc {target_val_epoch_acc} at epoch {epoch}.")
             
             is_source_best = True
         else:
@@ -142,16 +138,15 @@ def main(args):
             'best_target_val_acc': best_target_acc,
         }, is_source_best, checkpoint_dir = save_dir, epoch = epoch + 1)
 
-
-
     print("==> Training done!")
-    print("==> [Source] Best accuracy {}".format(best_source_acc))
-    print("==> [Target] Best accuracy {}".format(best_target_acc))
-    
+    print(f"==> [Source] Best accuracy {best_source_acc}")
+    print(f"==> [Target] Best accuracy {best_target_acc}")
+
+    run.stop()
+
 
 if __name__ == "__main__":
 
     parser = create_parser()
-    
     args = parser.parse_args()
     main(args)

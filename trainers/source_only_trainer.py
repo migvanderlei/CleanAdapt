@@ -1,14 +1,10 @@
 import time
-
 import torch
 
-from utils.utils import AverageMeter, ProgressMeter,\
-    accuracy
-
+from utils.utils import AverageMeter, ProgressMeter, accuracy
 from utils import optimizer as optim
 
-def train_one_epoch(data_loader, model, criterion, optimizer, epoch, args, device, wandb_run=None):
-
+def train_one_epoch(data_loader, model, criterion, optimizer, epoch, args, device, neptune_run=None):
     '''
     Executes one epoch of training on the train data
     '''
@@ -38,14 +34,11 @@ def train_one_epoch(data_loader, model, criterion, optimizer, epoch, args, devic
             seq, targets = seq.to(device), targets.to(device)
 
         logits, _ = model(seq, args)
-        if args.modality == 'Joint':
-            pred_logits = (logits[0] + logits[1]) / 2
-        else:
-            pred_logits = logits[0]
+        pred_logits = (logits[0] + logits[1]) / 2 if args.modality == 'Joint' else logits[0]
 
         loss = criterion(pred_logits, targets)
-
         acc = accuracy(pred_logits, targets)[0]
+
         acc_cls.update(acc[0], targets.size(0))
         ce_loss.update(loss, targets.size(0))
 
@@ -59,19 +52,15 @@ def train_one_epoch(data_loader, model, criterion, optimizer, epoch, args, devic
         if batch_idx % args.print_freq == 0:
             progress.display(batch_idx)
 
-        if wandb_run is not None:
-            wandb_run.log({
-                "train/batch_loss": loss.item(),
-                "train/batch_accuracy": acc[0].item(),
-                "train/batch": batch_idx,
-                "train/epoch": epoch
-            })
+        if neptune_run is not None:
+            neptune_run["train/batch/loss"].append(loss.item())
+            neptune_run["train/batch/accuracy"].append(acc[0].item())
+            neptune_run["train/batch/idx"].append(batch_idx)
+            neptune_run["train/batch/epoch"].append(epoch)
 
-    if wandb_run is not None:
-        wandb_run.log({
-            "train/epoch_loss": ce_loss.avg,
-            "train/epoch_accuracy": acc_cls.avg,
-            "train/epoch": epoch
-        })
+    if neptune_run is not None:
+        neptune_run["train/epoch/loss"].append(ce_loss.avg)
+        neptune_run["train/epoch/accuracy"].append(acc_cls.avg)
+        neptune_run["train/epoch/idx"].append(epoch)
 
     return acc_cls.avg, ce_loss.avg

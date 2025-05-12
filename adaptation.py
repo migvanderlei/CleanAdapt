@@ -6,12 +6,13 @@ import random
 import pickle
 import builtins
 from itertools import chain
+import neptune
+from dotenv import load_dotenv
 
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
 import torch.optim as optim
-import wandb
 
 import warnings
 warnings.filterwarnings("ignore")
@@ -28,6 +29,9 @@ idx2cls = {0: "climb", 1: "fencing", 2: "golf", 3: "kick_ball",
             4: "pullup", 5: "punch", 6: "pushup", 7: "ride_bike", 8: "ride_horse",
             9: "shoot_ball", 10: "shoot_bow", 11: "walk"}
 
+load_dotenv()
+
+NEPTUNE_API_TOKEN = os.getenv('NEPTUNE_API_TOKEN')
 
 def main(args):
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
@@ -50,14 +54,18 @@ def main(args):
     os.makedirs(save_dir, exist_ok=True)
 
     run_name = "-".join(["r-", str(args.r), args.source_dataset, args.target_dataset, args.modality])
-    wandb.login()
-    run = wandb.init(
-        project="video-domain-adaptation",
-        config=args,
-        dir=log_dir,
-        entity='migvanderlei-ufam',
-        name=run_name
+
+    # Initialize Neptune
+    run = neptune.init(
+        project="migvanderlei/cleanadapt-video-domain-adaptation",
+        api_token=NEPTUNE_API_TOKEN,
+        name=run_name,
+        tags=["domain-adaptation", args.adaptation_mode],
+        capture_stdout=False,
+        capture_stderr=False
     )
+
+    run["hyperparameters"] = vars(args)
 
     best_target_acc_t = 0
     best_target_acc_s = 0
@@ -117,33 +125,32 @@ def main(args):
         print("Epoch: [{}/{}] [Validation][Student Model] Target accuracy: {:.2f} Target loss: {:.4f}".format(
             epoch, args.num_epochs, target_val_epoch_acc_s, target_val_epoch_loss))
 
-        if run is not None:
-            log_data = {
-                "epoch": epoch,
-                "lr": optimizer.param_groups[0]["lr"]
-            }
+        # Log data to Neptune
+        log_data = {
+            "epoch": epoch,
+            "lr": optimizer.param_groups[0]["lr"]
+        }
 
-            if args.modality == "RGB":
-                log_data["[Train] Accuracy - RGB"] = train_acc[0]
-                log_data["[Train] Loss - RGB"] = train_loss[0]
-            elif args.modality == "Flow":
-                log_data["[Train] Accuracy - Flow"] = train_acc[0]
-                log_data["[Train] Loss - Flow"] = train_loss[0]
-            elif args.modality == "Joint":
-                log_data["[Train] Accuracy - RGB"] = train_acc[0]
-                log_data["[Train] Accuracy - Flow"] = train_acc[1]
-                log_data["[Train] Loss - RGB"] = train_loss[0]
-                log_data["[Train] Loss - Flow"] = train_loss[1]
+        if args.modality == "RGB":
+            log_data["[Train] Accuracy - RGB"] = train_acc[0]
+            log_data["[Train] Loss - RGB"] = train_loss[0]
+        elif args.modality == "Flow":
+            log_data["[Train] Accuracy - Flow"] = train_acc[0]
+            log_data["[Train] Loss - Flow"] = train_loss[0]
+        elif args.modality == "Joint":
+            log_data["[Train] Accuracy - RGB"] = train_acc[0]
+            log_data["[Train] Accuracy - Flow"] = train_acc[1]
+            log_data["[Train] Loss - RGB"] = train_loss[0]
+            log_data["[Train] Loss - Flow"] = train_loss[1]
 
-            log_data["[Validation][Student] Accuracy"] = target_val_epoch_acc_s
-            log_data["[Validation][Student] Loss"] = target_val_epoch_loss.item()
+        log_data["[Validation][Student] Accuracy"] = target_val_epoch_acc_s
+        log_data["[Validation][Student] Loss"] = target_val_epoch_loss.item()
 
-            if args.use_ema and ema_model is not None:
-                log_data["[Validation][Teacher] Accuracy"] = target_val_epoch_acc_t
-                log_data["[Validation][Teacher] Loss"] = target_val_epoch_loss.item()
+        if args.use_ema and ema_model is not None:
+            log_data["[Validation][Teacher] Accuracy"] = target_val_epoch_acc_t
+            log_data["[Validation][Teacher] Loss"] = target_val_epoch_loss.item()
 
-            run.log(log_data)
-
+        run.log_metrics(log_data, step=epoch)
 
         if args.use_ema and target_val_epoch_acc_t > best_target_acc_t:
             best_target_acc_t = target_val_epoch_acc_t
@@ -187,6 +194,3 @@ if __name__ == "__main__":
     
     args = parser.parse_args()
     main(args)
-
-
-
