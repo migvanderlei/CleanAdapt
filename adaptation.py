@@ -55,7 +55,7 @@ def main(args):
         project="video-domain-adaptation",
         config=args,
         dir=log_dir,
-        entity='avijit9',
+        entity='migvanderlei-ufam',
         name=run_name
     )
 
