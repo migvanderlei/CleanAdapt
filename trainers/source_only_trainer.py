@@ -7,10 +7,10 @@ from utils.utils import AverageMeter, ProgressMeter,\
 
 from utils import optimizer as optim
 
-def train_one_epoch(data_loader, model, criterion, optimizer, epoch, args, device):
+def train_one_epoch(data_loader, model, criterion, optimizer, epoch, args, device, wandb_run=None):
 
     '''
-    executes one epoch of training on the train data
+    Executes one epoch of training on the train data
     '''
 
     batch_time = AverageMeter('Time', ':1.2f')
@@ -25,14 +25,10 @@ def train_one_epoch(data_loader, model, criterion, optimizer, epoch, args, devic
     )
 
     model.train()
-
     end = time.time()
-
     optimizer.zero_grad()
 
     for batch_idx, batch in enumerate(data_loader):
-    
-        
         data_time.update(time.time() - end)
 
         seq, targets, _ = batch
@@ -40,7 +36,6 @@ def train_one_epoch(data_loader, model, criterion, optimizer, epoch, args, devic
             seq, targets = [seq[0].to(device), seq[1].to(device)], targets.to(device)
         else:
             seq, targets = seq.to(device), targets.to(device)
-            
 
         logits, _ = model(seq, args)
         if args.modality == 'Joint':
@@ -50,19 +45,13 @@ def train_one_epoch(data_loader, model, criterion, optimizer, epoch, args, devic
 
         loss = criterion(pred_logits, targets)
 
-        cls_out = torch.argmax(pred_logits, dim = 1)
-
         acc = accuracy(pred_logits, targets)[0]
         acc_cls.update(acc[0], targets.size(0))
-
         ce_loss.update(loss, targets.size(0))
 
-
         loss.backward()
-
         optimizer.step()
         optimizer.zero_grad()
-
 
         batch_time.update(time.time() - end)
         end = time.time()
@@ -70,13 +59,19 @@ def train_one_epoch(data_loader, model, criterion, optimizer, epoch, args, devic
         if batch_idx % args.print_freq == 0:
             progress.display(batch_idx)
 
-    return acc_cls.avg, ce_loss.avg,
+        if wandb_run is not None:
+            wandb_run.log({
+                "train/batch_loss": loss.item(),
+                "train/batch_accuracy": acc[0].item(),
+                "train/batch": batch_idx,
+                "train/epoch": epoch
+            })
 
+    if wandb_run is not None:
+        wandb_run.log({
+            "train/epoch_loss": ce_loss.avg,
+            "train/epoch_accuracy": acc_cls.avg,
+            "train/epoch": epoch
+        })
 
-
-
-
-
-
-
-
+    return acc_cls.avg, ce_loss.avg

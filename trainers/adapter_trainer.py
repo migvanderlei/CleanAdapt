@@ -179,7 +179,7 @@ def sample_selection_step(dataloader, model, args, device, r = 0.8):
     
 
 
-def train_one_epoch(data_loader, model, ema_model, criterion, optimizer, epoch, args, device):
+def train_one_epoch(data_loader, model, ema_model, criterion, optimizer, epoch, args, device, wandb_run):
     batch_time = AverageMeter('Time', ':1.2f')
     data_time = AverageMeter('Data', ':1.2f')
     train_1_acc = AverageMeter('Acc-RGB@cls', ':1.2f')
@@ -263,7 +263,30 @@ def train_one_epoch(data_loader, model, ema_model, criterion, optimizer, epoch, 
             progress.display(batch_idx)
 
     if args.modality == 'RGB' or args.modality == 'Flow':
-        return [train_1_acc.avg], [train_1_loss.avg]
+        train_acc = [train_1_acc.avg]
+        train_loss = [train_1_loss.avg]
     else:
-        return [train_1_acc.avg, train_2_acc.avg], [train_1_loss.avg, train_2_loss.avg]
+        train_acc = [train_1_acc.avg, train_2_acc.avg]
+        train_loss = [train_1_loss.avg, train_2_loss.avg]
 
+    if wandb_run is not None:
+        log_data = {
+            "epoch": epoch,
+            "lr": optimizer.param_groups[0]["lr"]
+        }
+
+        if args.modality == "RGB":
+            log_data["Train/RGB/Accuracy"] = train_acc[0]
+            log_data["Train/RGB/Loss"] = train_loss[0]
+        elif args.modality == "Flow":
+            log_data["Train/Flow/Accuracy"] = train_acc[0]
+            log_data["Train/Flow/Loss"] = train_loss[0]
+        elif args.modality == "Joint":
+            log_data["Train/RGB/Accuracy"] = train_acc[0]
+            log_data["Train/Flow/Accuracy"] = train_acc[1]
+            log_data["Train/RGB/Loss"] = train_loss[0]
+            log_data["Train/Flow/Loss"] = train_loss[1]
+
+        args.run.log(log_data)
+
+    return train_acc, train_loss

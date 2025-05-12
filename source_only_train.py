@@ -60,7 +60,6 @@ def main(args):
         entity = 'migvanderlei-ufam',
         name = run_name
     )
-    run = None
 
     # Dataloader creation
     weak_transform_train = get_weak_transforms(args, 'train')
@@ -92,12 +91,22 @@ def main(args):
     optimizer = optim.SGD(model.parameters(), args.lr,
     weight_decay = args.weight_decay, momentum = args.momentum)
 
+    if run is not None:
+        wandb.config.update({
+            "optimizer": optimizer.__class__.__name__,
+            "learning_rate": args.lr,
+            "weight_decay": args.weight_decay,
+            "momentum": args.momentum,
+            "loss_function": criterion.__class__.__name__,
+            "num_epochs": args.num_epochs,
+        }, allow_val_change=True)
+
     # start training
     for epoch in tqdm(range(0, args.num_epochs), desc="Epochs"):
         adjust_learning_rate(optimizer, epoch, args)
 
         train_epoch_acc, train_epoch_loss = source_only_trainer.train_one_epoch(source_train_loader, \
-            model, criterion, optimizer, epoch, args, device)
+            model, criterion, optimizer, epoch, args, device, run)
 
         if run is not None:
             run.log({"source/loss_supervised": train_epoch_loss, "epoch": epoch})
