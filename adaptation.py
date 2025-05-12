@@ -120,15 +120,15 @@ def main(args):
         train_acc, train_loss = adapter_trainer.train_one_epoch(
             target_train_loader, model, ema_model, criterion, optimizer, epoch, args, device, run)
 
-        target_val_epoch_acc_s, target_val_epoch_loss = validation.validate(target_val_loader, model, epoch, args, device)
+        target_val_epoch_acc_s, target_val_epoch_loss_s = validation.validate(target_val_loader, model, epoch, args, device)
 
         if args.use_ema:
-            target_val_epoch_acc_t, target_val_epoch_loss = validation.validate(target_val_loader, ema_model.ema, epoch, args, device)
+            target_val_epoch_acc_t, target_val_epoch_loss_t = validation.validate(target_val_loader, ema_model.ema, epoch, args, device)
             print("Epoch: [{}/{}] [Validation][Teacher Model] Target accuracy: {:.2f} Target loss: {:.4f}".format(
-                epoch, args.num_epochs, target_val_epoch_acc_t, target_val_epoch_loss))
+                epoch, args.num_epochs, target_val_epoch_acc_t, target_val_epoch_loss_t))
 
         print("Epoch: [{}/{}] [Validation][Student Model] Target accuracy: {:.2f} Target loss: {:.4f}".format(
-            epoch, args.num_epochs, target_val_epoch_acc_s, target_val_epoch_loss))
+            epoch, args.num_epochs, target_val_epoch_acc_s, target_val_epoch_loss_s))
 
         # Log data to Neptune
         log_data = {
@@ -149,11 +149,11 @@ def main(args):
             log_data["[Train] Loss - Flow"] = train_loss[1]
 
         log_data["[Validation][Student] Accuracy"] = target_val_epoch_acc_s
-        log_data["[Validation][Student] Loss"] = target_val_epoch_loss.item()
+        log_data["[Validation][Student] Loss"] = target_val_epoch_loss_s.item()
 
         if args.use_ema and ema_model is not None:
             log_data["[Validation][Teacher] Accuracy"] = target_val_epoch_acc_t
-            log_data["[Validation][Teacher] Loss"] = target_val_epoch_loss.item()
+            log_data["[Validation][Teacher] Loss"] = target_val_epoch_loss_t.item()
 
         for key, value in log_data.items():
             run[key].append(value)
