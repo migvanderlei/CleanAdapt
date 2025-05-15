@@ -10,12 +10,15 @@ from utils.utils import AverageMeter, ProgressMeter, accuracy, update_ema_variab
 from sklearn.mixture import GaussianMixture
 
 @torch.no_grad()
-def sample_selection_step_teacher_student(dataloader, model, args, device, r = 0.8):
+def sample_selection_step_teacher_student(dataloader, model, args, device, r = 0.8, neptune_run=None):
     loss_dict = {}
     pseudo_dict = {}
     orig_target_dict = {}
     selected_sample_dict = {} # stores the flag for the selected samples 
     updated_pseudo_dict = {}
+
+    total_loss_accumulator = []
+
 
 
     for batch_idx, batch in enumerate(dataloader):
@@ -41,11 +44,17 @@ def sample_selection_step_teacher_student(dataloader, model, args, device, r = 0
                 F.cross_entropy(appendits[1], pseudo_target, reduction = 'none')
             predictions = torch.argmax(0.5 * (appendits[0] + appendits[1]), dim = 1)
 
+        total_loss_accumulator.extend(total_loss.tolist())
+
         for i in range(total_loss.size(0)):
             loss_dict[batch[-1][i]] = total_loss[i].item()
             updated_pseudo_dict[batch[-1][i]] = predictions[i].item()
             pseudo_dict[batch[-1][i]] = pseudo_target[i].item()
             orig_target_dict[batch[-1][i]] = orig_target[i].item()
+    
+    if neptune_run is not None:
+        mean_loss = np.mean(total_loss_accumulator)
+        neptune_run["[Selection][Teacher] Loss"].append(mean_loss)
 
     for cls_idx in range(args.num_classes):
 

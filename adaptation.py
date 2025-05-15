@@ -111,7 +111,7 @@ def main(args):
         target_train_loader.dataset._update_video_list(select_all=True)
 
         if args.use_ema:
-            adapter_trainer.sample_selection_step_teacher_student(target_train_loader, ema_model, args, device, r=args.r)
+            adapter_trainer.sample_selection_step_teacher_student(target_train_loader, ema_model, args, device, r=args.r, neptune_run=run)
         else:
             adapter_trainer.sample_selection_step(target_train_loader, model, args, device, r=args.r)
 
@@ -137,16 +137,16 @@ def main(args):
         }
 
         if args.modality == "RGB":
-            log_data["[Train] Accuracy - RGB"] = train_acc[0]
-            log_data["[Train] Loss - RGB"] = train_loss[0]
+            log_data["[Train][Student] Accuracy - RGB"] = train_acc[0]
+            log_data["[Train][Student] Loss - RGB"] = train_loss[0]
         elif args.modality == "Flow":
-            log_data["[Train] Accuracy - Flow"] = train_acc[0]
-            log_data["[Train] Loss - Flow"] = train_loss[0]
+            log_data["[Train][Student] Accuracy - Flow"] = train_acc[0]
+            log_data["[Train][Student] Loss - Flow"] = train_loss[0]
         elif args.modality == "Joint":
-            log_data["[Train] Accuracy - RGB"] = train_acc[0]
-            log_data["[Train] Accuracy - Flow"] = train_acc[1]
-            log_data["[Train] Loss - RGB"] = train_loss[0]
-            log_data["[Train] Loss - Flow"] = train_loss[1]
+            log_data["[Train][Student] Accuracy - RGB"] = train_acc[0]
+            log_data["[Train][Student] Accuracy - Flow"] = train_acc[1]
+            log_data["[Train][Student] Loss - RGB"] = train_loss[0]
+            log_data["[Train][Student] Loss - Flow"] = train_loss[1]
 
         log_data["[Validation][Student] Accuracy"] = target_val_epoch_acc_s
         log_data["[Validation][Student] Loss"] = target_val_epoch_loss_s.item()
@@ -183,7 +183,10 @@ def main(args):
     print("==> Training done!")
     if args.use_ema:
         print("==> [Target][Teacher] Best accuracy {:.2f}".format(best_target_acc_t))
+        run["[Target][Teacher] Best accuracy"] = best_target_acc_t
+
     print("==> [Target][Student] Best accuracy {:.2f}".format(best_target_acc_s))
+    run["[Target][Student] Best accuracy"] = best_target_acc_s
 
     with open("output-{}-{}-{}.txt".format(args.source_dataset, args.target_dataset, args.modality), "a") as text_file:
         if args.use_ema:

@@ -141,7 +141,8 @@ def main(args):
     print("==> Training done!")
     print(f"==> [Source] Best accuracy {best_source_acc}")
     print(f"==> [Target] Best accuracy {best_target_acc}")
-
+    run["[Target] Best accuracy"] = best_target_acc
+    run["[Source] Best accuracy"] = best_source_acc
     run.stop()
 
 
